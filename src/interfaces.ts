@@ -1,3 +1,5 @@
+import {BinaryMetadata} from "./runner/executable";
+
 export enum RPCTaskType {
     Compile = 1,
     RunStandard = 2,
@@ -83,6 +85,9 @@ export interface StandardRunTask {
     fileIOOutput?: string;
     userExecutableName: string;
     spjExecutableName?: string;
+    metaData?: BinaryMetadata;
+    executable?: Buffer;
+    spjExecutable?: Buffer;
 }
 
 export interface InteractionRunTask {

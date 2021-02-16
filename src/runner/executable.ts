@@ -11,9 +11,11 @@ import { get as getRedis, put as putRedis } from './redis';
 import { globalConfig as Cfg } from './config';
 import { getLanguage, Language } from '../languages';
 import { redisBinarySuffix, redisMetadataSuffix } from '../interfaces';
+import fs = require("fs")
+import {pushExecutableToServer} from "./tasks";
 Bluebird.promisifyAll(lockfile);
 
-interface BinaryMetadata {
+export interface BinaryMetadata {
     language: string;
     code: string;
 }
@@ -29,53 +31,27 @@ export async function pushBinary(name: string, language: Language, code: string,
         language: language.name,
         code: code
     };
-    await putRedis(name + redisBinarySuffix, binary);
-    await putRedis(name + redisMetadataSuffix, msgpack.encode(data));
+
+    fs.writeFile(path, binary, err => {
+        if (err) {
+            return winston.error(err.message)
+        }
+        winston.info(`file ${name} has been dumped into ${path}`)
+    })
+    await pushExecutableToServer(binary, data)
 }
 
 // Return value: [path, language, code]
-export async function fetchBinary(name: string): Promise<[string, Language, string]> {
-    winston.verbose(`Fetching binary ${name}...`);
-    const targetName = pathLib.join(Cfg.binaryDirectory, name);
-    const lockFileName = pathLib.join(Cfg.binaryDirectory, `${name}-get.lock`);
-
-    const metadata = msgpack.decode(await getRedis(name + redisMetadataSuffix)) as BinaryMetadata;
-    const isCurrentlyWorking = await fse.exists(lockFileName);
-    // The binary already exists, no need for locking
-    if (await fse.exists(targetName) && !isCurrentlyWorking) {
-        winston.debug(`Binary ${name} exists, no need for fetching...`);
+export async function fetchBinary(spj: boolean,task: any): Promise<[string, Language, string]> {
+    let binary: Buffer
+    if (spj){
+        binary = task.spjExecutable
     } else {
-        winston.debug(`Acquiring lock ${lockFileName}...`);
-        await lockfile.lockAsync(lockFileName, {
-            wait: 1000
-        });
-        let ok = false;
-        try {
-            winston.debug(`Got lock for ${name}.`);
-            if (await fse.exists(targetName)) {
-                winston.debug(`Work ${name} done by others...`);
-            } else {
-                winston.debug(`Doing work: fetching binary for ${name} ...`);
-                await fse.mkdir(targetName);
-                const binary = await getRedis(name + redisBinarySuffix);
-                winston.debug(`Decompressing binary (size=${binary.length})...`);
-                await new Promise((res, rej) => {
-                    const s = tar.extract({
-                        cwd: targetName
-                    });
-                    s.on('error', rej);
-                    s.on('close', res);
-                    s.write(binary);
-                    s.end();
-                });
-            }
-            ok = true;
-        } finally {
-            if (!ok)
-                await fse.rmdir(targetName);
-            winston.debug('Unlocking...');
-            await lockfile.unlockAsync(lockFileName);
-        }
+        binary = task.executable
     }
-    return [targetName, getLanguage(metadata.language), metadata.code];
+
+    // TODO: binary to local path
+    let path: string
+    return [path, task.metaData.language, task.metaData.code]
+
 }
