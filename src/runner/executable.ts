@@ -12,7 +12,7 @@ import { globalConfig as Cfg } from './config';
 import { getLanguage, Language } from '../languages';
 import { redisBinarySuffix, redisMetadataSuffix } from '../interfaces';
 import fs = require("fs")
-import {pushExecutableToServer} from "./tasks";
+import {pushExecutableToServer} from "./ioj-tasks";
 Bluebird.promisifyAll(lockfile);
 
 export interface BinaryMetadata {
