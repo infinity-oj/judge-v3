@@ -10,6 +10,7 @@ export enum RPCTaskType {
 export interface RPCRequest {
     type: RPCTaskType;
     task: any;
+    taskId: string;
 }
 
 export interface CompileTask {
