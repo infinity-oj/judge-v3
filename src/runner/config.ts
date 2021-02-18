@@ -36,8 +36,6 @@ const optionDefinitions = [
 
 const options = commandLineArgs(optionDefinitions);
 
-console.log(options);
-
 function readJSON(path: string): any {
     console.log("Path: " + path);
     return JSON.parse(fs.readFileSync(path, 'utf8'));

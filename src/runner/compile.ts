@@ -12,6 +12,7 @@ import { startSandbox } from 'simple-sandbox';
 import { SandboxParameter, MountInfo, SandboxStatus, SandboxResult } from 'simple-sandbox/lib/interfaces';
 import { getFolderSize as getSize, readFileLength } from '../utils';
 import { pushBinary } from './executable';
+// import { pushBinary } from './executable';
 
 const convert = new AnsiToHtml({ escapeXML: true });
 

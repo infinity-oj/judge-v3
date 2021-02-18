@@ -11,6 +11,7 @@ export interface RPCRequest {
     type: RPCTaskType;
     task: any;
     taskId: string;
+    token: string;
 }
 
 export interface CompileTask {
