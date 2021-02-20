@@ -7,12 +7,14 @@ import msgpack = require("msgpack-lite");
 import winston = require("winston");
 
 import { streamToBuffer } from "../utils";
-import { get as getRedis, put as putRedis } from "./redis";
 import { globalConfig as Cfg } from "./config";
 import { getLanguage, Language } from "../languages";
 import { redisBinarySuffix, redisMetadataSuffix } from "../interfaces";
 import fs = require("fs");
-import { http } from "./ioj-api";
+import { fetchFile, http } from "./ioj-api";
+
+import nodeStream = require("stream");
+
 Bluebird.promisifyAll(lockfile);
 
 const FormData = require("form-data");
@@ -24,7 +26,7 @@ export interface BinaryMetadata {
 
 export async function newVolume() {
   const res = await http.post("/volume");
-  console.log(res.data);
+  // console.log(res.data);
   return res.data.name;
 }
 
@@ -33,7 +35,7 @@ export async function pushBinary(
   language: Language,
   code: string,
   path: string
-): Promise<void> {
+): Promise<string> {
   winston.verbose(`Pushing binary ${name}, creating tar archive...`);
   const binary = await streamToBuffer(
     tar.create(
@@ -45,10 +47,6 @@ export async function pushBinary(
       ["."]
     )
   );
-  const data: BinaryMetadata = {
-    language: language.name,
-    code: code,
-  };
 
   const form = new FormData();
   form.append("file", binary, name + redisBinarySuffix);
@@ -64,28 +62,59 @@ export async function pushBinary(
         "Content-Type": `multipart/form-data; boundary=${form._boundary}`,
       },
     });
-    console.log(res);
+    // console.log(res);
+    return res.data.name + ":/" + name + redisBinarySuffix;
   } catch (err) {
     console.log(err);
   }
-  // console.log(res)
-
-  // await putRedis(name + redisMetadataSuffix, msgpack.encode(data));
 }
 
 // Return value: [path, language, code]
-export async function fetchBinary(
-  spj: boolean,
-  task: any
-): Promise<[string, Language, string]> {
-  let binary: Buffer;
-  if (spj) {
-    binary = task.spjExecutable;
-  } else {
-    binary = task.executable;
-  }
+export async function fetchBinary(name: string, volumeFile: string): Promise<string> {
+  winston.verbose(`Fetching binary ${name}...`);
 
-  // TODO: binary to local path
-  let path: string;
-  return [path, task.metaData.language, task.metaData.code];
+  const targetName = pathLib.join(Cfg.binaryDirectory, name);
+  const lockFileName = pathLib.join(Cfg.binaryDirectory, `${name}-get.lock`);
+
+  // const metadata = msgpack.decode(await getRedis(name + redisMetadataSuffix)) as BinaryMetadata;
+  const isCurrentlyWorking = await fse.exists(lockFileName);
+  // The binary already exists, no need for locking
+  if ((await fse.exists(targetName)) && !isCurrentlyWorking) {
+    winston.debug(`Binary ${name} exists, no need for fetching...`);
+  } else {
+    winston.debug(`Acquiring lock ${lockFileName}...`);
+    await lockfile.lockAsync(lockFileName, {
+      wait: 1000,
+    });
+    let ok = false;
+    try {
+      winston.debug(`Got lock for ${name}.`);
+      if (await fse.exists(targetName)) {
+        winston.debug(`Work ${name} done by others...`);
+      } else {
+        winston.debug(`Doing work: fetching binary for ${name} ...`);
+        await fse.mkdir(targetName);
+
+        const fileStream = await fetchFile(volumeFile);
+        const binary = await streamToBuffer(fileStream as nodeStream.Readable)
+        // const binary = await getRedis(name + redisBinarySuffix);
+        // winston.debug(`Decompressing binary (size=${binary.length})...`);
+        await new Promise((res, rej) => {
+          const s = tar.extract({
+            cwd: targetName,
+          });
+          s.on("error", rej);
+          s.on("close", res);
+          s.write(binary)
+          s.end();
+        });
+      }
+      ok = true;
+    } finally {
+      if (!ok) await fse.rmdir(targetName);
+      winston.debug("Unlocking...");
+      await lockfile.unlockAsync(lockFileName);
+    }
+  }
+  return targetName;
 }

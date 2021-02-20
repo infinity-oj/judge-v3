@@ -1,7 +1,8 @@
-import { CompileTask, RPCRequest, RPCTaskType } from "../interfaces";
+import { CompileTask, RPCRequest, RPCTaskType, StandardRunTask } from "../interfaces";
 import winston = require("winston");
 import axios from "axios";
-
+import { Stream } from "stream";
+const unzip = require("unzip");
 let cookie = null;
 
 export const http = axios.create({
@@ -9,15 +10,17 @@ export const http = axios.create({
   withCredentials: true,
 });
 
-http.interceptors.request.use(function (config) {
-  // Do something before request is sent
-  config.headers.cookie = cookie
-  return config;
-}, function (error) {
-  // Do something with request error
-  return Promise.reject(error);
-});
-
+http.interceptors.request.use(
+  function (config) {
+    // Do something before request is sent
+    config.headers.cookie = cookie;
+    return config;
+  },
+  function (error) {
+    // Do something with request error
+    return Promise.reject(error);
+  }
+);
 
 export async function login(
   username: String,
@@ -37,9 +40,18 @@ export async function login(
       },
     }
   );
-  cookie = login.headers["set-cookie"][0]
-  await http.get("/session/principal")
+  cookie = login.headers["set-cookie"][0];
+  await http.get("/session/principal");
   return true;
+}
+
+function streamToString(stream): Promise<string> {
+  const chunks = [];
+  return new Promise((resolve, reject) => {
+    stream.on("data", (chunk: any) => chunks.push(chunk));
+    stream.on("error", reject);
+    stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+  });
 }
 
 export async function pull(type: String): Promise<RPCRequest> {
@@ -49,15 +61,16 @@ export async function pull(type: String): Promise<RPCRequest> {
         type,
       },
     });
-    // console.log("?", res);
-    // console.log(res.data);
+    // console.log(JSON.stringify(res.data));
     if (res.data) {
       const data = res.data[0];
       let rpc: RPCRequest;
-      if (data.type.startsWith("builder")) {
+      if (data.type === "syzoj/compilor") {
+        const codeStream = await fetchFile(data.inputs[0].value);
+
         const task: CompileTask = {
-          code: "int main() { return 0;}",
-          language: "cpp",
+          code: await streamToString(codeStream),
+          language: data.inputs[1].value,
           extraFiles: [],
           binaryName: "abc",
         };
@@ -67,6 +80,24 @@ export async function pull(type: String): Promise<RPCRequest> {
           taskId: data.taskId,
           type: RPCTaskType.Compile,
           token: "",
+          inputs: data.inputs,
+          outputs: [],
+        };
+      }
+      if (data.type === "syzoj/standard") {
+
+        const task: StandardRunTask = {
+          time: 1000,
+          memory: 256,
+        };
+
+        rpc = {
+          task: task,
+          taskId: data.taskId,
+          type: RPCTaskType.RunStandard,
+          token: "",
+          inputs: data.inputs,
+          outputs: [],
         };
       }
       return rpc;
@@ -90,6 +121,56 @@ export async function reserve(task: RPCRequest): Promise<Boolean> {
   return false;
 }
 
-export async function push(task: RPCRequest): Promise<RPCRequest> {
-  return null;
+export async function fetchFile(uri: string): Promise<Stream> {
+  const tmp = uri.split(":");
+  let volumeName, volumePath, wanted: String;
+  volumeName = tmp[0];
+  volumePath = "/";
+  if (tmp.length !== 1) {
+    wanted = tmp[1];
+  }
+
+  const url = `/volume/${volumeName}/download`;
+
+  const res = await http({
+    method: "get",
+    url: url,
+    params: {
+      dirname: "/",
+    },
+    responseType: "stream",
+  });
+
+  return new Promise((resolve, reject) => {
+    res.data
+      .pipe(unzip.Parse())
+      .on("entry", function (entry) {
+        var fileName = entry.path;
+        if (
+          require("path").relative(
+            "/" + fileName,
+            "/" + volumeName + wanted
+          ) === ""
+        ) {
+          resolve(entry as Stream);
+        } else {
+          entry.autodrain();
+        }
+      })
+      .on("close", reject);
+  });
+}
+
+export async function push(task: RPCRequest): Promise<void> {
+  const url = `/task/${task.taskId}`;
+  try {
+    await http.put(url, {
+      token: task.token,
+      outputs: task.outputs,
+      warning: "",
+      error: "",
+    });
+  } catch (err) {
+    winston.error(`Error occur when push task: ${err.message}`);
+  }
 }

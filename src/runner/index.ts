@@ -23,9 +23,9 @@ async function handle(task: RPCRequest) {
   winston.debug(`Handling task ${util.inspect(task)}`);
   if (task.type === RPCTaskType.Compile) {
     winston.debug("Task type is compile");
-    return await compile(task.task);
+    return await compile(task);
   } else if (task.type === RPCTaskType.RunStandard) {
-    return await judgeStandard(task.task);
+    return await judgeStandard(task);
   } else {
     winston.warn("Task type unsupported");
     throw new Error(`Task type ${task.type} not supported!`);
@@ -42,16 +42,19 @@ async function handle(task: RPCRequest) {
   winston.info("Start consuming the queue.");
   while (true) {
     await delay(1500);
-    const task = await pull("builder/Clang");
+    let task = await pull("syzoj/compilor");
     if (task == null) {
-      continue;
+      task = await pull("syzoj/standard");
+      if (task == null) {
+        continue;
+      }
     }
-    console.log(task.taskId)
+    // console.log(task.taskId)
     if (await reserve(task)) {
       winston.info(`Got runner task`);
       try {
         const result = await handle(task);
-        console.log(result)
+        winston.debug(JSON.stringify(result))
       } catch (err) {
         winston.error(
           `Fail to handle task ${task.type}, error message: ${err.message}`

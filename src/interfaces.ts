@@ -7,11 +7,19 @@ export enum RPCTaskType {
     RunInteraction = 4
 }
 
+
+export interface Slot {
+    type: string,
+    value: string
+}
+
 export interface RPCRequest {
     type: RPCTaskType;
     task: any;
     taskId: string;
     token: string;
+    inputs: Slot[];
+    outputs: Slot[];
 }
 
 export interface CompileTask {
@@ -78,18 +86,18 @@ export interface StandardRunResult {
 }
 
 export interface StandardRunTask {
-    testDataName: string;
-    inputData: string;
-    answerData: string;
+    // testDataName: string;
+    // inputData: string;
+    // answerData: string;
     time: number;
     memory: number;
-    fileIOInput?: string;
-    fileIOOutput?: string;
-    userExecutableName: string;
-    spjExecutableName?: string;
-    metaData?: BinaryMetadata;
-    executable?: Buffer;
-    spjExecutable?: Buffer;
+    // fileIOInput?: string;
+    // fileIOOutput?: string;
+    // userExecutableName: string;
+    // spjExecutableName?: string;
+    // metaData?: BinaryMetadata;
+    // executable?: Buffer;
+    // spjExecutable?: Buffer;
 }
 
 export interface InteractionRunTask {
