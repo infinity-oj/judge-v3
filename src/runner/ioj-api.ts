@@ -61,15 +61,12 @@ export async function pull(type: String): Promise<RPCRequest> {
         type,
       },
     });
-    // console.log(JSON.stringify(res.data));
     if (res.data) {
       const data = res.data[0];
       let rpc: RPCRequest;
       if (data.type === "syzoj/compilor") {
-        const codeStream = await fetchFile(data.inputs[0].value);
-
         const task: CompileTask = {
-          code: await streamToString(codeStream),
+          code: data.inputs[0].value,
           language: data.inputs[1].value,
           extraFiles: [],
           binaryName: "abc",
@@ -85,10 +82,9 @@ export async function pull(type: String): Promise<RPCRequest> {
         };
       }
       if (data.type === "syzoj/standard") {
-
         const task: StandardRunTask = {
-          time: 1000,
-          memory: 256,
+          time: data.inputs[4].value,
+          memory: data.inputs[3].value,
         };
 
         rpc = {

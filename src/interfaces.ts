@@ -10,7 +10,7 @@ export enum RPCTaskType {
 
 export interface Slot {
     type: string,
-    value: string
+    value: any
 }
 
 export interface RPCRequest {

@@ -24,7 +24,7 @@ import { runProgram, runDiff } from "./run";
 import { getLanguage, Language } from "../languages";
 import { fetchBinary } from "./executable";
 import { signals } from "./signals";
-import { fetchFile } from "./ioj-api";
+import { fetchFile, push } from "./ioj-api";
 import { InternalSymbolName } from "typescript";
 
 const workingDir = `${Cfg.workingDirectory}/data`;
@@ -163,8 +163,8 @@ export async function judgeStandard(
     );
     const language = getLanguage(_task.inputs[1].value);
     const userCode = _task.inputs[2].value;
-    const stdInputStream = await fetchFile(_task.inputs[3].value);
-    const stdOutputStream = await fetchFile(_task.inputs[4].value);
+    const stdInputStream = await fetchFile(_task.inputs[5].value);
+    const stdOutputStream = await fetchFile(_task.inputs[6].value);
 
     // if (inputFilePath != null) {
     //     winston.debug("Copying input file...");
@@ -283,6 +283,17 @@ export async function judgeStandard(
       winston.debug(`Running diff`);
       const diffResult = await runDiff(spjWorkingDir, "user_out", "answer");
       winston.debug("Judgement done!!");
+
+      _task.outputs = [
+        // result
+        {
+          type: "number",
+          value: diffResult.pass ? 1 : 0,
+        },
+      ];
+
+      await push(_task);
+
       return Object.assign(
         {
           scoringRate: diffResult.pass ? 1 : 0,
